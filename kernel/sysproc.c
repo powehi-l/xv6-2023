@@ -75,6 +75,14 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  uint64 buf, mask;
+  int number;
+  argaddr(0, &buf);
+  argint(1, &number);
+  argaddr(2, &mask);
+  
+  if(pageaccess(myproc()->pagetable, buf, number, mask) < 0)
+    return -1;
   return 0;
 }
 #endif

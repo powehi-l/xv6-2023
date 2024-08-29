@@ -449,3 +449,58 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+void
+printpagetable(pagetable_t pagetable, int level)
+{
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if(pte & PTE_V){
+      for(int j = 0; j <= level; j++){
+        printf("..");
+        if(j == level){
+          printf("%d", i);
+        }else{
+          printf(" ");
+        }
+      }
+      printf(": pte %p pa %p\n", (uint64)pte, (uint64)PTE2PA(pte));
+    }
+
+    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+      // This PTE points to a lower-level page table
+      uint64 child = PTE2PA(pte);
+      printpagetable((pagetable_t)child, level+1);
+    }
+  }
+}
+
+void
+vmprint(pagetable_t pagetable)
+{
+  if(pagetable == 0){
+    panic("invalid pagetable");
+  }
+  printf("page table %p\n", (uint64)pagetable);
+
+  printpagetable(pagetable, 0);
+}
+
+int
+pageaccess(pagetable_t pagetable, uint64 base, int len, uint64 mask){
+  if(len > 32)
+    return -1;
+  int maskbits = 0;
+  pte_t *pte;
+
+  for(int i = 0; i < len; i++){
+    pte = walk(pagetable, (uint64)(base + i * PGSIZE), 0);
+    if((*pte & PTE_V) && (*pte & PTE_A)){
+      maskbits |= 1 << i;
+      *pte &= ~PTE_A;
+    }
+  }
+  if(copyout(pagetable, mask, (char*)&maskbits, len / 8) < 0)
+    return -1;
+  return 0;
+}
