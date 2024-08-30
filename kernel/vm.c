@@ -14,6 +14,7 @@ pagetable_t kernel_pagetable;
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
+extern char refcount[];
 
 // Make a direct-map page table for the kernel.
 pagetable_t
@@ -315,7 +316,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  //char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -323,14 +324,26 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    if(PTE_FLAGS(*pte) & PTE_W){
+      flags = (PTE_FLAGS(*pte) & (~PTE_W)) | PTE_C | PTE_O;
+    }
+    else{
+      flags = (PTE_FLAGS(*pte) & (~PTE_W)) | PTE_C;
+    }
+    //if((mem = kalloc()) == 0)
+    //  goto err;
+    //memmove(mem, (char*)pa, PGSIZE);
+    uvmunmap(old, i, 1, 0);
+    if(mappages(old, i, PGSIZE, pa, flags) != 0){
+      kfree((void*)pa);
       goto err;
     }
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      kfree((void*)pa);
+      goto err;
+    }
+    refcount[pa / PGSIZE] += 1;
+    // maybe need to record number of reference in pte
   }
   return 0;
 

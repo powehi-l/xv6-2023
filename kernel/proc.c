@@ -294,6 +294,7 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+  printf("parent: %d, child: %d\n", p->pid, np->pid);
   np->sz = p->sz;
 
   // copy saved user registers.
