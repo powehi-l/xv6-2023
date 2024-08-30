@@ -133,3 +133,16 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void backtrace(void)
+{
+  printf("backtrace:\n");
+  uint64 *stackframe = (uint64*)r_fp();
+  uint64 page = PGROUNDDOWN((uint64)stackframe);
+  while(PGROUNDDOWN((uint64)stackframe) == page){
+    printf("%p\n", *(stackframe - 1));
+    //printf("%p\n", stackframe - 2);
+    stackframe = (uint64*)(*(stackframe - 2));
+    //printf("stackframe: %p\n", stackframe);
+  }
+}
