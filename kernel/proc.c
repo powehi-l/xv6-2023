@@ -294,7 +294,9 @@ fork(void)
     release(&np->lock);
     return -1;
   }
-  printf("parent: %d, child: %d\n", p->pid, np->pid);
+  //printf("parent: %d, child: %d\n", p->pid, np->pid);
+  //vmprint(p->pagetable);
+  //vmprint(np->pagetable);
   np->sz = p->sz;
 
   // copy saved user registers.

@@ -60,6 +60,7 @@ usertrap(void)
     // sepc points to the ecall instruction,
     // but we want to return to the next instruction.
     p->trapframe->epc += 4;
+    //printf("syscall: epc %p, cause %d\n", p->trapframe->epc, p->trapframe->a7);
 
     // an interrupt will change sepc, scause, and sstatus,
     // so enable only now that we're done with those registers.
@@ -71,18 +72,29 @@ usertrap(void)
   } else if(r_scause() == 15){
     pte_t *pte = walk(p->pagetable, PGROUNDDOWN(r_stval()), 0);
     uint flags = PTE_FLAGS(*pte);
-    if((flags & PTE_C) && (flags & PTE_O)){
-      char* mem;
-      if((mem = kalloc()) == 0);
-        //tobe killed
-      memmove(mem, (char*)(PTE2PA(*pte)), PGSIZE);
-      uvmunmap(p->pagetable, PGROUNDDOWN(r_stval()), 1, 0);
-      mappages(p->pagetable, PGROUNDDOWN(r_stval()), PGSIZE, (uint64)mem, (flags & (~(PTE_C | PTE_O))) | PTE_W);
-      refcount[PTE2PA(*pte) / PGSIZE] -= 1;
+    uint64 pa = PTE2PA(*pte);
+    if((flags & PTE_V) && (flags & PTE_C) && (flags & PTE_O)){
+      if(refcount[pa / PGSIZE] == 1){
+        uvmunmap(p->pagetable, PGROUNDDOWN(r_stval()), 1, 0);
+        mappages(p->pagetable, PGROUNDDOWN(r_stval()), PGSIZE, pa, (flags & (~(PTE_C | PTE_O))) | PTE_W);
+      }
+      else{
+        char* mem;
+        if((mem = kalloc()) == 0);
+          //tobe killed
+        memmove(mem, (char*)(PTE2PA(*pte)), PGSIZE);
+        uvmunmap(p->pagetable, PGROUNDDOWN(r_stval()), 1, 0);
+        mappages(p->pagetable, PGROUNDDOWN(r_stval()), PGSIZE, (uint64)mem, (flags & (~(PTE_C | PTE_O))) | PTE_W);
+        refcount[pa / PGSIZE] -= 1;
+      }
+    }
+    else if((flags & PTE_V) && (flags & PTE_C) && (!(flags & PTE_O))){
+      setkilled(p);
     }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+    //vmprint(p->pagetable);
     setkilled(p);
   }
 
