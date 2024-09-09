@@ -339,14 +339,14 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     //memmove(mem, (char*)pa, PGSIZE);
     uvmunmap(old, i, 1, 0);
     if(mappages(old, i, PGSIZE, pa, flags) != 0){
-      kfree((void*)pa);
+      //kfree((void*)pa);
       goto err;
     }
     if(mappages(new, i, PGSIZE, pa, flags) != 0){
-      kfree((void*)pa);
+      //kfree((void*)pa);
       goto err;
     }
-    refcount[pa / PGSIZE] += 1;
+    refcount[(pa - KERNBASE) / PGSIZE] += 1;
     // maybe need to record number of reference in pte
   }
   //printf("old\n");
@@ -400,7 +400,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
       n = len;
     if((*pte & PTE_W) == 0){
       if((*pte & PTE_C) && (*pte & PTE_O)){
-        if(refcount[pa0 / PGSIZE] == 1){
+        if(refcount[(pa0 - KERNBASE) / PGSIZE] == 1){
           uvmunmap(pagetable, va0, 1, 0);
           mappages(pagetable, va0, PGSIZE, pa0, (flags & (~(PTE_C | PTE_O))) | PTE_W);
           // need to copy too
@@ -413,13 +413,13 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
           memmove(mem, (char*)pa0, PGSIZE);
           //printf("pa0 %p\n", (uint64)pa0);
-          uvmunmap(pagetable, va0, 1, 1);
+          uvmunmap(pagetable, va0, 1, 0);
           mappages(pagetable, va0, PGSIZE, (uint64)mem, (flags & (~(PTE_C | PTE_O))) | PTE_W);
           // need to change pa0 to mem because new page allocated
           //printf("%d\n", *(mem + dstva - va0));
           memmove((void *)(mem + (dstva - va0)), src, n);
           //printf("%d\n", *(mem + dstva - va0));
-          //refcount[pa0 / PGSIZE] -= 1;
+          refcount[(pa0 - KERNBASE) / PGSIZE] -= 1;
           //printf("allocate new page\n");
         }
       }

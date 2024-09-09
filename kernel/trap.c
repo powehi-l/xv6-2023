@@ -70,26 +70,34 @@ usertrap(void)
   } else if((which_dev = devintr()) != 0){
     // ok
   } else if(r_scause() == 15){
-    pte_t *pte = walk(p->pagetable, PGROUNDDOWN(r_stval()), 0);
-    uint flags = PTE_FLAGS(*pte);
-    uint64 pa = PTE2PA(*pte);
-    if((flags & PTE_V) && (flags & PTE_C) && (flags & PTE_O)){
-      if(refcount[pa / PGSIZE] == 1){
-        uvmunmap(p->pagetable, PGROUNDDOWN(r_stval()), 1, 0);
-        mappages(p->pagetable, PGROUNDDOWN(r_stval()), PGSIZE, pa, (flags & (~(PTE_C | PTE_O))) | PTE_W);
-      }
-      else{
-        char* mem;
-        if((mem = kalloc()) == 0);
-          //tobe killed
-        memmove(mem, (char*)(PTE2PA(*pte)), PGSIZE);
-        uvmunmap(p->pagetable, PGROUNDDOWN(r_stval()), 1, 0);
-        mappages(p->pagetable, PGROUNDDOWN(r_stval()), PGSIZE, (uint64)mem, (flags & (~(PTE_C | PTE_O))) | PTE_W);
-        refcount[pa / PGSIZE] -= 1;
-      }
-    }
-    else if((flags & PTE_V) && (flags & PTE_C) && (!(flags & PTE_O))){
+    if(r_stval() >= MAXVA){
       setkilled(p);
+    }
+    else{
+      pte_t *pte = walk(p->pagetable, PGROUNDDOWN(r_stval()), 0);
+      uint flags = PTE_FLAGS(*pte);
+      uint64 pa = PTE2PA(*pte);
+      if((flags & PTE_V) && (flags & PTE_C) && (flags & PTE_O)){
+        if(refcount[(pa - KERNBASE) / PGSIZE] == 1){
+          uvmunmap(p->pagetable, PGROUNDDOWN(r_stval()), 1, 0);
+          mappages(p->pagetable, PGROUNDDOWN(r_stval()), PGSIZE, pa, (flags & (~(PTE_C | PTE_O))) | PTE_W);
+        }
+        else{
+          char* mem;
+          if((mem = kalloc()) == 0){
+            setkilled(p);
+          }else{
+            //tobe killed
+            memmove(mem, (char*)(PTE2PA(*pte)), PGSIZE);
+            uvmunmap(p->pagetable, PGROUNDDOWN(r_stval()), 1, 0);
+            mappages(p->pagetable, PGROUNDDOWN(r_stval()), PGSIZE, (uint64)mem, (flags & (~(PTE_C | PTE_O))) | PTE_W);
+            refcount[(pa - KERNBASE) / PGSIZE] -= 1;
+          }
+        }
+      }
+      else if((flags & PTE_V) && (flags & PTE_C) && (!(flags & PTE_O))){
+        setkilled(p);
+      }
     }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
